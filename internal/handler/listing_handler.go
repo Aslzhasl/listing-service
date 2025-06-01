@@ -32,6 +32,7 @@ func (h *ListingHandler) GetApprovedListings(c *gin.Context) {
 	if v := c.Query("category"); v != "" {
 		filters["category"] = v
 	}
+
 	if v := c.Query("city"); v != "" {
 		filters["city"] = v
 	}
