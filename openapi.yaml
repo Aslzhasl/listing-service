@@ -1,0 +1,468 @@
+openapi: 3.0.0
+info:
+  title: Listing Service API
+  version: "1.0"
+  description: |
+    Сервис для управления объявлениями (CRUD + модерация).  
+    Базовый путь: `/api/v1`.  
+    Для админских маршрутов требуется JWT (Bearer) с ролью ADMIN.
+servers:
+  - url: http://localhost:8080
+    description: Local server
+paths:
+  /api/v1/listings:
+    get:
+      summary: Получить утвержденные объявления
+      description: |
+        Возвращает список объявлений со статусом "approved", с возможностью фильтрации и пагинации.
+      tags:
+        - Listings
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+          description: Фильтр по категории
+        - name: city
+          in: query
+          schema:
+            type: string
+          description: Фильтр по городу
+        - name: min_price
+          in: query
+          schema:
+            type: number
+            format: double
+          description: Минимальная цена
+        - name: max_price
+          in: query
+          schema:
+            type: number
+            format: double
+          description: Максимальная цена
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Лимит записей
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+          description: Смещение
+      responses:
+        '200':
+          description: Успешный ответ — список объектов Listing
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Listing'
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Создать новое объявление
+      description: |
+        Создает объявление с полем status="pending" по умолчанию.  
+        ID генерируется сервером, поля createdAt и updatedAt заполняются автоматически.
+      tags:
+        - Listings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListingCreateRequest'
+      responses:
+        '201':
+          description: Объявление успешно создано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+        '400':
+          description: Некорректный запрос
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Ошибка сервера при создании
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/listings/{id}:
+    get:
+      summary: Получить объявление по ID
+      description: Возвращает объявление по заданному идентификатору.
+      tags:
+        - Listings
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Идентификатор объявления
+      responses:
+        '200':
+          description: Объявление найдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+        '404':
+          description: Объявление не найдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      summary: Обновить объявление по ID
+      description: Обновляет поля существующего объявления. Поля createdAt и ownerId не изменяются.
+      tags:
+        - Listings
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Идентификатор объявления
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListingUpdateRequest'
+      responses:
+        '200':
+          description: Объявление успешно обновлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+        '400':
+          description: Некорректный запрос
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Ошибка сервера при обновлении
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Удалить объявление по ID
+      description: Удаляет объявление из базы.
+      tags:
+        - Listings
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Идентификатор объявления
+      responses:
+        '200':
+          description: Объявление успешно удалено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Объявление не найдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/admin/listings/pending:
+    get:
+      summary: Получить объявления со статусом "pending" (только для админа)
+      description: Возвращает список объявлений со статусом "pending". Требуется JWT с ролью ADMIN.
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Лимит записей
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+          description: Смещение
+      responses:
+        '200':
+          description: Успешный ответ — список объявлений
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Listing'
+        '401':
+          description: Неавторизован или некорректный токен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/admin/listings/{id}/approve:
+    put:
+      summary: Одобрить объявление
+      description: Меняет status на "approved". Требуется JWT с ролью ADMIN.
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Идентификатор объявления
+      responses:
+        '200':
+          description: Объявление одобрено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          description: Неавторизован или некорректный токен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Объявление не найдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/admin/listings/{id}/reject:
+    put:
+      summary: Отклонить объявление
+      description: Меняет status на "rejected". Требуется JWT с ролью ADMIN.
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Идентификатор объявления
+      responses:
+        '200':
+          description: Объявление отклонено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          description: Неавторизован или некорректный токен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Объявление не найдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Listing:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Уникальный идентификатор объявления
+        owner_id:
+          type: string
+          description: Идентификатор владельца (UUID)
+        title:
+          type: string
+          description: Заголовок объявления
+        description:
+          type: string
+          description: Описание объявления
+        price:
+          type: number
+          format: double
+          description: Цена
+        category:
+          type: string
+          description: Категория объявления
+        city:
+          type: string
+          description: Город
+        region:
+          type: string
+          description: Регион
+        image_url:
+          type: string
+          description: URL изображения
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+          description: Статус объявления
+        type:
+          type: string
+          enum: [rent, sale, search]
+          description: Тип объявления
+        created_at:
+          type: string
+          format: date-time
+          description: Время создания
+        updated_at:
+          type: string
+          format: date-time
+          description: Время последнего обновления
+      required:
+        - id
+        - owner_id
+        - title
+        - description
+        - price
+        - category
+        - city
+        - region
+        - image_url
+        - status
+        - type
+        - created_at
+        - updated_at
+
+    ListingCreateRequest:
+      type: object
+      properties:
+        owner_id:
+          type: string
+          description: Идентификатор владельца (UUID)
+        title:
+          type: string
+          description: Заголовок объявления
+        description:
+          type: string
+          description: Описание объявления
+        price:
+          type: number
+          format: double
+          description: Цена
+        category:
+          type: string
+          description: Категория объявления
+        city:
+          type: string
+          description: Город
+        region:
+          type: string
+          description: Регион
+        image_url:
+          type: string
+          description: URL изображения
+        type:
+          type: string
+          enum: [rent, sale, search]
+          description: Тип объявления (по умолчанию "rent")
+      required:
+        - owner_id
+        - title
+        - description
+        - price
+        - category
+        - city
+        - region
+        - image_url
+
+    ListingUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          description: Заголовок объявления
+        description:
+          type: string
+          description: Описание объявления
+        price:
+          type: number
+          format: double
+          description: Цена
+        category:
+          type: string
+          description: Категория объявления
+        city:
+          type: string
+          description: Город
+        region:
+          type: string
+          description: Регион
+        image_url:
+          type: string
+          description: URL изображения
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+          description: Статус (может изменяться лишь админом)
+        type:
+          type: string
+          enum: [rent, sale, search]
+          description: Тип объявления
+      required:
+        - title
+        - description
+        - price
+        - category
+        - city
+        - region
+        - image_url
+        - status
+        - type
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Сообщение об ошибке
+
+    SuccessResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Успешное сообщение
