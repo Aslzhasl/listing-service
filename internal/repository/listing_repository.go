@@ -18,11 +18,11 @@ func NewListingRepository(db *sqlx.DB) *ListingRepository {
 // Создать объявление
 func (r *ListingRepository) Create(ctx context.Context, l *model.Listing) error {
 	_, err := r.DB.NamedExecContext(ctx, `
-		INSERT INTO listings 
-		(id, owner_id, title, description, price, category, city, region, image_url, status, type, created_at, updated_at)
-		VALUES 
-		(:id, :owner_id, :title, :description, :price, :category, :city, :region, :image_url, :status, :type, :created_at, :updated_at)
-	`, l)
+        INSERT INTO listings 
+            (id, owner_id, device_id, title, description, price, category, city, region, image_url, status, type, created_at, updated_at)
+        VALUES 
+            (:id, :owner_id, :device_id, :title, :description, :price, :category, :city, :region, :image_url, :status, :type, :created_at, :updated_at)
+    `, l)
 	return err
 }
 
@@ -79,19 +79,21 @@ func (r *ListingRepository) Reject(ctx context.Context, id string) error {
 // Обновить объявление
 func (r *ListingRepository) Update(ctx context.Context, l *model.Listing) error {
 	_, err := r.DB.NamedExecContext(ctx, `
-		UPDATE listings SET
-			title = :title,
-			description = :description,
-			price = :price,
-			category = :category,
-			city = :city,
-			region = :region,
-			image_url = :image_url,
-			status = :status,
-			type = :type,
-			updated_at = :updated_at
-		WHERE id = :id
-	`, l)
+        UPDATE listings SET
+            owner_id    = :owner_id,
+            device_id   = :device_id,
+            title       = :title,
+            description = :description,
+            price       = :price,
+            category    = :category,
+            city        = :city,
+            region      = :region,
+            image_url   = :image_url,
+            status      = :status,
+            type        = :type,
+            updated_at  = :updated_at
+        WHERE id = :id
+    `, l)
 	return err
 }
 
@@ -133,4 +135,19 @@ func (r *ListingRepository) GetFiltered(ctx context.Context, filters map[string]
 	var listings []model.Listing
 	err := r.DB.SelectContext(ctx, &listings, query, args...)
 	return listings, err
+}
+
+func (r *ListingRepository) Exists(ctx context.Context, listingID string) (bool, error) {
+	var count int
+	const q = `SELECT COUNT(1) FROM listings WHERE id = $1`
+	if err := r.DB.GetContext(ctx, &count, q, listingID); err != nil {
+		return false, fmt.Errorf("ListingRepository.Exists: %w", err)
+	}
+	return count > 0, nil
+}
+
+func (r *ListingRepository) UpdatePhotoFileID(ctx context.Context, listingID string, fileID string) error {
+	query := `UPDATE listings SET photo_file_id = $1 WHERE id = $2`
+	_, err := r.DB.ExecContext(ctx, query, fileID, listingID)
+	return err
 }
