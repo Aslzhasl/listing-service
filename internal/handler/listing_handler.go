@@ -1,7 +1,11 @@
 package handler
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -127,15 +131,28 @@ type CreateListingRequestDTO struct {
 	Type        string  `json:"type" binding:"required"`
 }
 
+type CreateDeviceRequest struct {
+	Name        string
+	Description string
+	Category    string
+	PricePerDay float64
+	Available   bool
+	ImageURL    string
+	OwnerID     string
+	City        string
+	Region      string
+}
+
 // CreateListing создаёт новое объявление, проверяя сначала, что ownerId и deviceId существуют.
 func (h *ListingHandler) CreateListing(c *gin.Context) {
-	var req CreateListingRequestDTO
+	var req model.Listing
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
 		return
 	}
 
-	// 1. Проверяем пользователя в User Service
+	log.Printf("[CreateListing] req.OwnerID = '%s'", req.OwnerID)
+
 	userExists, err := h.checkUserExists(c, req.OwnerID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "error checking user"})
@@ -146,25 +163,52 @@ func (h *ListingHandler) CreateListing(c *gin.Context) {
 		return
 	}
 
-	// 2. Проверяем устройство в Device Service
-	deviceExists, err := h.checkDeviceExists(c, req.DeviceID)
+	deviceReq := model.CreateDeviceRequest{
+		Name:        req.Title,
+		Description: req.Description,
+		Category:    req.Category,
+		PricePerDay: req.Price,
+		Available:   true,
+		ImageURL:    req.ImageURL,
+		OwnerID:     req.OwnerID,
+		City:        req.City,
+		Region:      req.Region,
+	}
+
+	deviceJSON, _ := json.Marshal(deviceReq)
+	authHeader := c.GetHeader("Authorization")
+
+	request, err := http.NewRequest("POST", "https://device-service-721348598691.europe-central2.run.app/api/devices", bytes.NewBuffer(deviceJSON))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "error checking device"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create device request"})
 		return
 	}
-	if !deviceExists {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "device with given ID not found"})
+	request.Header.Set("Content-Type", "application/json")
+	if authHeader != "" {
+		request.Header.Set("Authorization", authHeader)
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(request)
+	if err != nil || (resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated) {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "device service error"})
+		return
+	}
+	defer resp.Body.Close()
+
+	var deviceRes model.CreateDeviceResponse
+	if err := json.NewDecoder(resp.Body).Decode(&deviceRes); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to decode device service response"})
 		return
 	}
 
-	// 3. Формируем модель объявления
 	newID := strconv.FormatInt(time.Now().UnixNano(), 10)
 	now := time.Now().Format(time.RFC3339)
 
 	listing := &model.Listing{
 		ID:            newID,
 		OwnerID:       req.OwnerID,
-		DeviceID:      req.DeviceID,
+		DeviceID:      deviceRes.ID,
 		Title:         req.Title,
 		Description:   req.Description,
 		Price:         req.Price,
@@ -179,11 +223,11 @@ func (h *ListingHandler) CreateListing(c *gin.Context) {
 		AverageRating: 0.00,
 	}
 
-	// 4. Сохраняем в БД
 	if err := h.Repo.Create(c.Request.Context(), listing); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
 	c.JSON(http.StatusCreated, listing)
 }
 
@@ -309,7 +353,7 @@ func (h *ListingHandler) Reject(c *gin.Context) {
 
 // checkDeviceExists делает HTTP-запрос к Device Service, чтобы убедиться, что устройство существует.
 func (h *ListingHandler) checkDeviceExists(c *gin.Context, deviceID string) (bool, error) {
-	deviceServiceURL := "http://localhost:8080"
+	deviceServiceURL := "https://user-service-721348598691.europe-central2.run.app"
 	url := fmt.Sprintf("%s/api/devices/%s", deviceServiceURL, deviceID)
 
 	// Создаём новый запрос
@@ -342,29 +386,45 @@ func (h *ListingHandler) checkDeviceExists(c *gin.Context, deviceID string) (boo
 
 // checkUserExists делает HTTP-запрос к User Service, чтобы убедиться, что пользователь существует.
 func (h *ListingHandler) checkUserExists(c *gin.Context, userID string) (bool, error) {
-	// Задайте базовый URL вашего User Service:
-	userServiceURL := "https://user-service-721348598691.europe-central2.run.app"
-
-	// Проверьте, какой именно путь используется в User Service: "/api/users/:id" или "/users/:id"
-	// В данном примере считаем, что маршрут "/api/users/:id".
+	userServiceURL := "http://localhost:8080"
 	url := fmt.Sprintf("%s/api/users/%s", userServiceURL, userID)
+
+	log.Printf("[checkUserExists] Checking user at: %s", url)
+
 	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, url, nil)
 	if err != nil {
+		log.Printf("[checkUserExists] Failed to create request: %v", err)
 		return false, fmt.Errorf("failed to create request to User Service: %w", err)
+	}
+
+	// (опционально) добавь лог Authorization
+	authHeader := c.GetHeader("Authorization")
+	if authHeader != "" {
+		log.Println("[checkUserExists] Authorization header found")
+		req.Header.Set("Authorization", authHeader)
+	} else {
+		log.Println("[checkUserExists] No Authorization header found")
 	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
+		log.Printf("[checkUserExists] Error calling User Service: %v", err)
 		return false, fmt.Errorf("User Service call error: %w", err)
 	}
 	defer resp.Body.Close()
 
+	log.Printf("[checkUserExists] Response status: %d", resp.StatusCode)
+
 	switch resp.StatusCode {
 	case http.StatusOK:
+		log.Println("[checkUserExists] User found")
 		return true, nil
 	case http.StatusNotFound:
+		log.Println("[checkUserExists] User not found")
 		return false, nil
 	default:
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("[checkUserExists] Unexpected status: %d, body: %s", resp.StatusCode, string(body))
 		return false, fmt.Errorf("User Service returned status %d", resp.StatusCode)
 	}
 }

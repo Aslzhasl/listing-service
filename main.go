@@ -87,7 +87,7 @@ func main() {
 	// ─── 11) Start the server ─────────────────────────────────────────────────
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8083"
+		port = "8081"
 	}
 	log.Printf("✅ Listing service (with Reviews + Photo upload) running on port %s …", port)
 	if err := router.Run(":" + port); err != nil {

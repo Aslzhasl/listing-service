@@ -3,7 +3,7 @@ package model
 type Listing struct {
 	ID            string  `db:"id" json:"id"`
 	OwnerID       string  `db:"owner_id" json:"owner_id"`
-	DeviceID      string  `db:"device_id" json:"deviceId"`
+	DeviceID      string  `db:"device_id" json:"deviceId,omitempty"`
 	PhotoFileID   string  `db:"photo_file_id" json:"photoFileId"`
 	Title         string  `db:"title" json:"title"`
 	Description   string  `db:"description" json:"description"`
