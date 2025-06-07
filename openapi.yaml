@@ -3,40 +3,213 @@ openapi: 3.0.0
 info:
   title: Listing Service API
   version: "1.0"
-  description: |
-    Сервис для управления объявлениями (CRUD + модерация).  
-    Базовый путь: `/api/v1`.  
-    Для админских маршрутов требуется JWT (Bearer) с ролью ADMIN.
-servers:
-  - url: http://localhost:8080
-    description: Local server
+  description: API for managing listings, reviews and photos
+paths:
+  /api/listings:
+    get:
+      summary: Get approved listings with filters
+      tags: [Listings]
+      parameters:
+        - in: query
+          name: city
+          schema: {type: string}
+        - in: query
+          name: category
+          schema: {type: string}
+        - in: query
+          name: min_price
+          schema: {type: number}
+        - in: query
+          name: max_price
+          schema: {type: number}
+        - in: query
+          name: limit
+          schema: {type: integer}
+        - in: query
+          name: offset
+          schema: {type: integer}
+      responses:
+        "200":
+          description: List of approved listings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Listing'
+    post:
+      summary: Create new listing
+      tags: [Listings]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Listing'
+      responses:
+        "201":
+          description: Listing created
+
+  /api/listings/{id}:
+    get:
+      summary: Get listing by ID
+      tags: [Listings]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Listing detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+    put:
+      summary: Update listing
+      tags: [Listings]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Listing'
+      responses:
+        "200":
+          description: Listing updated
+    delete:
+      summary: Delete listing
+      tags: [Listings]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Listing deleted
+
+  /api/listings/{id}/reviews:
+    get:
+      summary: Get listing reviews
+      tags: [Reviews]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: List of reviews
+    post:
+      summary: Create review
+      tags: [Reviews]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewRequest'
+      responses:
+        "201":
+          description: Review created
+
+  /api/listings/{id}/photo:
+    post:
+      summary: Upload listing photo
+      tags: [Photos]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Photo uploaded
+    get:
+      summary: Download listing photo
+      tags: [Photos]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Listing photo
+
+  /api/listings/admin/pending:
+    get:
+      summary: Get pending listings (admin)
+      tags: [Admin]
+      parameters:
+        - in: query
+          name: limit
+          schema: {type: integer}
+        - in: query
+          name: offset
+          schema: {type: integer}
+      responses:
+        "200":
+          description: List of pending listings
+
+  /api/listings/admin/{id}/approve:
+    put:
+      summary: Approve listing (admin)
+      tags: [Admin]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Listing approved
+
+  /api/listings/admin/{id}/reject:
+    put:
+      summary: Reject listing (admin)
+      tags: [Admin]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Listing rejected
+
 components:
-  securitySchemes:
-    BearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
   schemas:
     Listing:
       type: object
-      required:
-        - id
-        - owner_id
-        - title
-        - description
-        - price
-        - category
-        - city
-        - region
-        - image_url
-        - status
-        - type
-        - created_at
-        - updated_at
       properties:
         id:
           type: string
-        owner_id:
+        ownerId:
+          type: string
+        deviceId:
           type: string
         title:
           type: string
@@ -44,102 +217,30 @@ components:
           type: string
         price:
           type: number
-          format: double
         category:
           type: string
         city:
           type: string
         region:
           type: string
-        image_url:
+        imageUrl:
           type: string
         status:
           type: string
-          enum: [pending, approved, rejected]
         type:
           type: string
-          enum: [rent, sale, search]
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-    ListingCreateRequest:
-      type: object
-      required:
-        - owner_id
-        - title
-        - description
-        - price
-        - category
-        - city
-        - region
-        - image_url
-      properties:
-        owner_id:
-          type: string
-        title:
-          type: string
-        description:
-          type: string
-        price:
+        averageRating:
           type: number
-          format: double
-        category:
+        createdAt:
           type: string
-        city:
+        updatedAt:
           type: string
-        region:
-          type: string
-        image_url:
-          type: string
-        type:
-          type: string
-          enum: [rent, sale, search]
-    ListingUpdateRequest:
-      type: object
-      required:
-        - title
-        - description
-        - price
-        - category
-        - city
-        - region
-        - image_url
-        - status
-        - type
-      properties:
-        title:
-          type: string
-        description:
-          type: string
-        price:
-          type: number
-          format: double
-        category:
-          type: string
-        city:
-          type: string
-        region:
-          type: string
-        image_url:
-          type: string
-        status:
-          type: string
-          enum: [pending, approved, rejected]
-        type:
-          type: string
-          enum: [rent, sale, search]
-    ErrorResponse:
+    ReviewRequest:
       type: object
       properties:
-        error:
+        userId:
           type: string
-    SuccessResponse:
-      type: object
-      properties:
-        message:
+        rating:
+          type: integer
+        comment:
           type: string
-
-paths: {}
